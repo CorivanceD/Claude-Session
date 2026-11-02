@@ -1,5 +1,6 @@
 import { Office } from './world.js';
 import { Dorm } from './dorm.js';
+import { alertsOn, setAlerts, canNotify, announceFinished, announceNeedsYou } from './notify.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -29,10 +30,54 @@ function markDirty() {
   requestAnimationFrame(() => { dirty = false; render(); });
 }
 
+let hookSetup = null;
+let setupDone = false;
+const EMPTY_FULL = 'Nobody is in the room yet. Send an agent off to the right, or start one in VS Code or a terminal and it will walk in here.';
+
+function renderSetup(listLen) {
+  const card = $('setup');
+  if (!card) return;
+  const needs = !!hookSetup && !hookSetup.installed;
+  const show = setupDone ? listLen === 0 : needs;
+  if (setupDone && listLen > 0) setupDone = false;
+  card.hidden = !show;
+  const missingTool = needs && (hookSetup.jq === false || hookSetup.curl === false);
+  if (!setupDone) {
+    $('setupHead').textContent = "Sessions from VS Code and your terminal can't reach this office yet.";
+    $('setupSub').textContent = missingTool ? 'Install jq and curl first, then reload.' : 'Connect them and a new session will walk in here.';
+    $('setupBtn').hidden = missingTool;
+    $('setupDetails').textContent = hookSetup?.settingsPath ? `Changes ${hookSetup.settingsPath}` : '';
+  }
+  $('empty').textContent = needs || setupDone ? 'Nobody is in the room yet.' : EMPTY_FULL;
+}
+
+async function connectSessions() {
+  const btn = $('setupBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/hooks/install', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.error) throw new Error(body.error || 'Could not connect.');
+    setupDone = true;
+    hookSetup = { ...(hookSetup || {}), installed: true };
+    $('setupHead').textContent = 'Connected. Sessions that were already open need to be restarted \u2014 new ones will walk in.';
+    $('setupSub').textContent = '';
+    $('setupBtn').hidden = true;
+    $('setupDetails').textContent = '';
+    renderSetup(agents.size);
+  } catch (e) {
+    $('setupSub').textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function init() {
+  $('setupBtn')?.addEventListener('click', connectSessions);
   try {
     health = await fetch('/api/health').then((r) => r.json());
     const snap = await fetch('/api/state').then((r) => r.json());
+    hookSetup = snap.hookSetup || hookSetup;
     (snap.agents || []).forEach((a) => agents.set(a.id, a));
     (snap.events || []).forEach((e) => { if (e.kind === 'ticker') pushFeed(e, true); });
     setInventory(snap.inventory);
@@ -73,10 +118,11 @@ function connect() {
     if (msg.kind === 'agent:remove') { agents.delete(msg.id); if (selected === msg.id) selected = null; markDirty(); return; }
     if (msg.kind === 'inventory:update') { setInventory(msg.inventory); markDirty(); return; }
     if (msg.kind === 'ask:open' || msg.kind === 'ask:resolved' || msg.kind === 'asks:update') {
+      if (msg.kind === 'ask:open') announceNeedsYou(banner);
       refreshAsks();
       return;
     }
-    if (msg.kind === 'run:finished') { refreshShelf(); markDirty(); }
+    if (msg.kind === 'run:finished') { announceFinished(msg.item, banner); refreshShelf(); markDirty(); }
     if (msg.kind === 'ticker') { pushFeed(msg); markDirty(); }
   };
 }
@@ -101,6 +147,7 @@ function setShelf(next) {
 async function refreshAsks() {
   try {
     const r = await fetch('/api/state').then((x) => x.json());
+    hookSetup = r.hookSetup || hookSetup;
     setAsks(r.asks);
     setShelf(r.history);
   } catch { /* the next event retries */ }
@@ -116,6 +163,7 @@ async function refreshShelf() {
 async function resync() {
   try {
     const snap = await fetch('/api/state').then((r) => r.json());
+    hookSetup = snap.hookSetup || hookSetup;
     agents.clear();
     (snap.agents || []).forEach((a) => agents.set(a.id, a));
     setInventory(snap.inventory);
@@ -182,6 +230,23 @@ function wire() {
   $('sharpenBtn').addEventListener('click', sharpenComposer);
   window.addEventListener('hashchange', () => showRoom(location.hash === '#dorm' ? 'dorm' : 'office'));
   $('detailClose').addEventListener('click', () => { selected = null; office.selected = null; markDirty(); });
+  const alertsBtn = $('alertsBtn');
+  const paintAlerts = (note) => {
+    alertsBtn.textContent = alertsOn() ? 'Alerts on' : 'Tell me when done';
+    alertsBtn.className = `badge ${alertsOn() ? 'real' : 'neutral'} clickable`;
+    alertsBtn.title = note || (alertsOn() ? 'You will hear a chime and get a notification when work finishes. Click to turn off.' : 'Get a notification and a chime when work finishes or needs you.');
+  };
+  alertsBtn.addEventListener('click', async () => {
+    const { permission } = await setAlerts(!alertsOn());
+    paintAlerts();
+    if (!alertsOn()) return;
+    if (permission === 'denied' || permission === 'unsupported' || !canNotify()) {
+      banner('Alerts are on, but your browser is blocking desktop notifications — you will still hear a chime and see the tab title change. Allow notifications for this site to get pop-ups too.');
+    } else {
+      banner('Alerts are on. You will be told when work finishes or needs you.', 'ok');
+    }
+  });
+  paintAlerts();
   $('needsYou').addEventListener('click', () => $('askCard').scrollIntoView({ behavior: 'smooth', block: 'start' }));
   $('askAllDeny').addEventListener('click', () => {
     for (const ask of asks.open || []) {
@@ -317,6 +382,7 @@ function render() {
   $('tabOfficeN').textContent = String(list.length);
   $('tabDormN').textContent = inventory?.known ? String(dorm.roster().length) : '—';
   $('empty').hidden = list.length > 0;
+  renderSetup(list.length);
   const roster = $('roster');
   roster.replaceChildren(...list.map(row));
 

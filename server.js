@@ -14,6 +14,7 @@ import { Asks } from './lib/asks.js';
 import { Projects } from './lib/projects.js';
 import { Usage } from './lib/usage.js';
 import { Sessions } from './lib/sessions.js';
+import { hookStatus, installHooks, uninstallHooks } from './lib/hook-install.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(HERE, 'public');
@@ -193,9 +194,24 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/state') return send(res, 200, {
       ...room.snapshot(health),
       hooks: hookStats(),
+      hookSetup: hookStatus(),
       asks: asks.snapshot(),
       history: room.history.snapshot(),
     });
+    if (req.method === 'POST' && (p === '/api/hooks/install' || p === '/api/hooks/uninstall')) {
+      try {
+        const out = p.endsWith('/install') ? installHooks() : uninstallHooks();
+        return send(res, 200, { ok: true, status: out.status });
+      } catch (err) {
+        const code = { NO_SETTINGS: 409, BAD_JSON: 409, NO_TOOLS: 503, NO_BRIDGE: 500 }[err.code];
+        if (!code) throw err;
+        const text = err.code === 'NO_SETTINGS' ? 'Claude Code has no settings file yet. Start Claude Code once, then try again.'
+          : err.code === 'BAD_JSON' ? 'Your Claude settings file is not valid JSON, so it was left alone.'
+          : err.code === 'NO_TOOLS' ? 'The hook bridge needs both jq and curl installed.'
+          : 'The hook bridge script is missing from this install.';
+        return send(res, code, { error: text });
+      }
+    }
     if (p === '/api/inventory') return send(res, 200, room.inventory.snapshot());
     if (p === '/api/history') return send(res, 200, room.history.snapshot());
 
@@ -494,7 +510,7 @@ server.listen(PORT, HOST, () => {
 });
 
 // Hooked sessions that vanish without a SessionEnd must still leave the floor.
-setInterval(() => reapStaleHooks(room, { history: room.history, asks }), 60_000).unref();
+setInterval(() => reapStaleHooks(room, { history: room.history, asks }), 15_000).unref();
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

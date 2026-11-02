@@ -173,9 +173,16 @@ its visit count), holding: the prompt, the folder, the outcome, wall-clock durat
 calls, cost, which helpers and skills it used, and the closing report.
 
 Outcomes are `finished the job`, `session closed`, `stopped with a problem`, `you stopped it`
-and `went quiet`. A closed session keeps sitting at its desk for six minutes first, so you can
-see how it ended, then leaves the floor and lives only on the shelf. The 60 most recent rows are
-kept.
+and `went quiet`. A finished or closed session keeps its desk for 45 seconds so you can see how it
+ended, then leaves the floor and lives only on the shelf. If the same editor session starts
+another turn, it walks back in. The 60 most recent rows are kept.
+
+### Tell me when it's done
+
+Press **Tell me when done** in the page header once. From then on, when a run finishes, hits a
+problem, goes quiet, or stops to ask you something, you get a desktop notification (if the
+browser allows it), a two-note chime, and the tab title flashes while the page is in the
+background. Runs you stopped yourself stay silent. The choice is remembered in the browser.
 
 The report is honest about its limits: a native run's own result text is captured, while a
 hooked (editor) session only ever reports what it *did*, never what it said — so its row says
@@ -236,6 +243,8 @@ node hooks/install-hooks.mjs --uninstall  # remove only these entries
 It **merges, never replaces**: your other settings (`env`, `permissions`, `model`) and any
 existing hooks are left untouched, and a one-time backup is written to
 `~/.claude/settings.json.agent-office.bak`.
+
+Or press **Connect my sessions** on the page when it offers it.
 
 **Hooks load when a session starts.** A Claude session that was already open when you
 install will not report until you start a new one or reload the editor. This is the single

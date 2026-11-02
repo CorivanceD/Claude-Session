@@ -19,6 +19,7 @@
     </div>
     <div class="topright">
       <button id="needsYou" class="badge waiting" type="button" hidden>waiting on you</button>
+      <button id="alertsBtn" class="badge neutral clickable" type="button">Tell me when done</button>
       <div id="feedBadge" class="badge neutral">connecting…</div>
       <div id="conn" class="conn"><i></i><span>socket</span></div>
       <div class="clock" id="clock">--:--:--</div>
@@ -80,6 +81,12 @@
           </div>
         </div>
         <ul id="roster" class="roster"></ul>
+        <div id="setup" class="setup" hidden>
+          <p class="setup-head" id="setupHead">Sessions from VS Code and your terminal can't reach this office yet.</p>
+          <p class="setup-sub" id="setupSub">Connect them and a new session will walk in here.</p>
+          <button class="primary" type="button" id="setupBtn">Connect my sessions</button>
+          <p class="hint" id="setupDetails"></p>
+        </div>
         <p id="empty" class="empty">Nobody is in the room yet. Send an agent off to the right, or start one in VS Code or a terminal and it will walk in here.</p>
         <footer class="totals" id="totals"></footer>
       </section>
