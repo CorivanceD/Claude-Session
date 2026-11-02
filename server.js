@@ -11,6 +11,7 @@ import { handleHook, reapStaleHooks, noteDismissal, hookStats } from './lib/hook
 import { Inventory } from './lib/inventory.js';
 import { History } from './lib/history.js';
 import { Asks } from './lib/asks.js';
+import { Images } from './lib/images.js';
 import { Projects } from './lib/projects.js';
 import { Usage } from './lib/usage.js';
 import { Sessions } from './lib/sessions.js';
@@ -27,6 +28,9 @@ room.inventory = new Inventory();
 room.history = new History(room);
 const asks = new Asks(room);
 room.asks = asks;
+const images = new Images();
+images.sweep();
+setInterval(() => images.sweep(), 60 * 60 * 1000).unref();
 const runs = new Map();
 const health = probeClaude();
 const projects = new Projects();
@@ -147,13 +151,22 @@ function send(res, code, body, headers = {}) {
 function readBody(req, limit = 64 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0;
+    let tooBig = false;
     const chunks = [];
     req.on('data', (c) => {
+      // Keep the socket alive so the 413 reply can be written; discard the rest.
+      if (tooBig) return;
       size += c.length;
-      if (size > limit) { reject(new Error('payload too large')); req.destroy(); return; }
+      if (size > limit) {
+        tooBig = true;
+        chunks.length = 0;
+        reject(new Error('payload too large'));
+        return;
+      }
       chunks.push(c);
     });
     req.on('end', () => {
+      if (tooBig) return;
       if (!chunks.length) return resolve({});
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
       catch { reject(new Error('invalid JSON body')); }
@@ -340,9 +353,21 @@ const server = http.createServer(async (req, res) => {
         return send(res, result.ok ? 200 : 400, result);
       }
 
+      if (p === '/api/ask-image') {
+        const body = await readBody(req, 8 * 1024 * 1024);
+        const ask = asks.getOpen(String(body.askId || ''));
+        if (!ask || ask.kind !== 'question') return send(res, 404, { error: 'that question is already answered or timed out' });
+        if (typeof body.data !== 'string' || body.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(body.data)) return send(res, 400, { error: 'that picture could not be read' });
+        if ((ask.imageIds || []).length >= 12) return send(res, 400, { error: 'that question already has 12 pictures' });
+        const saved = images.save(ask.id, Buffer.from(body.data, 'base64'));
+        if (saved.error) return send(res, 400, { error: saved.error });
+        (ask.imageIds ||= []).push(saved.imageId);
+        return send(res, 200, { ok: true, imageId: saved.imageId, name: String(body.name || 'picture').slice(0, 80), bytes: saved.bytes });
+      }
+
       if (p === '/api/ask') {
         const body = await readBody(req);
-        const out = asks.answer(String(body.askId || ''), body);
+        const out = asks.answer(String(body.askId || ''), body, images);
         if (!out) return send(res, 404, { error: 'that question is already answered or timed out' });
         if (out.error) return send(res, 400, out);
         return send(res, 200, { ok: true, asks: asks.snapshot() });
@@ -499,6 +524,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') return serveStatic(req, res, p);
     return send(res, 405, { error: 'method not allowed' });
   } catch (err) {
+    if (err.message === 'payload too large') {
+      const msg = p === '/api/ask-image' ? 'that picture is too big (5 MB at most)' : 'that request is too big';
+      return send(res, 413, { error: msg }, { Connection: 'close' });
+    }
     return send(res, 400, { error: err.message });
   }
 });

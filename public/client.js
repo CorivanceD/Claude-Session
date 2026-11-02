@@ -1,4 +1,5 @@
 import { Office } from './world.js';
+import { renderLegend } from './legend.js';
 import { Dorm } from './dorm.js';
 import { alertsOn, setAlerts, canNotify, announceFinished, announceNeedsYou } from './notify.js';
 
@@ -73,6 +74,7 @@ async function connectSessions() {
 }
 
 async function init() {
+  renderLegend($('legendBar'));
   $('setupBtn')?.addEventListener('click', connectSessions);
   try {
     health = await fetch('/api/health').then((r) => r.json());
@@ -118,7 +120,7 @@ function connect() {
     if (msg.kind === 'agent:remove') { agents.delete(msg.id); if (selected === msg.id) selected = null; markDirty(); return; }
     if (msg.kind === 'inventory:update') { setInventory(msg.inventory); markDirty(); return; }
     if (msg.kind === 'ask:open' || msg.kind === 'ask:resolved' || msg.kind === 'asks:update') {
-      if (msg.kind === 'ask:open') announceNeedsYou(banner);
+      if (msg.kind === 'ask:open') announceNeedsYou(banner, msg.ask);
       refreshAsks();
       return;
     }
@@ -412,6 +414,9 @@ function render() {
 // ---------------------------------------------------------------- approvals --
 
 let lastOpenAsks = 0;
+// The ids and deadlines of the rows on screen. Rows are rebuilt only when this changes,
+// so ticked options and typed answers survive the agent events that re-render the page.
+let askKey = '';
 
 function renderAsks() {
   const open = asks.open || [];
@@ -419,7 +424,11 @@ function renderAsks() {
   card.hidden = open.length === 0;
   $('askCount').textContent = String(open.length);
   $('askWindow').textContent = String(Math.round((asks.windowMs || 50000) / 1000));
-  $('askList').replaceChildren(...open.map(askRow));
+  const key = open.map((a) => `${a.id}:${a.expiresAt}`).join(',');
+  if (key !== askKey) {
+    askKey = key;
+    $('askList').replaceChildren(...open.map(askRow));
+  }
   document.body.classList.toggle('needs-you', open.length > 0);
 
   // The top bar stays on screen even when the panel has scrolled away, so the count
@@ -448,14 +457,64 @@ function askRow(ask) {
 
   const btns = el('div', 'askbtns');
   if (ask.kind === 'question') {
+    const send = el('button', 'mini answer allow', 'Send answers');
     for (const q of ask.questions || []) {
+      if (q.header) li.append(el('span', 'qhead', q.header));
+      li.append(el('div', 'qtext', q.question));
+      const opts = el('div', 'qopts');
       for (const o of q.options || []) {
-        const b = el('button', 'mini answer', o.label);
-        b.title = o.hint || '';
-        b.onclick = () => answerAsk(ask.id, { decision: 'allow', answers: { [q.question]: o.label } });
-        btns.append(b);
+        const lab = el('label', 'qopt');
+        const inp = document.createElement('input');
+        inp.type = q.multiSelect ? 'checkbox' : 'radio';
+        inp.name = `q${ask.id}-${q.index}`;
+        inp.value = o.label;
+        const b = el('b', '', o.label);
+        lab.append(inp, b);
+        if (o.hint) lab.append(el('span', 'qhint', o.hint));
+        opts.append(lab);
       }
+      const other = document.createElement('input');
+      other.type = 'text';
+      other.className = 'qother';
+      other.maxLength = 300;
+      other.placeholder = 'Or type your own answer';
+      opts.append(other);
+      opts.addEventListener('change', (e) => {
+        if (e.target !== other && e.target.checked) other.value = '';
+      });
+      other.addEventListener('input', () => {
+        if (other.value) for (const c of opts.querySelectorAll('.qopt input')) c.checked = false;
+      });
+      opts._pics = [];
+      opts._busy = 0;
+      opts.append(picsBox(opts, ask, li));
+      li.append(opts);
     }
+    li.addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData?.items || [])]
+        .filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean);
+      if (!files.length) return;
+      e.preventDefault();
+      const blocks = [...li.querySelectorAll('.qopts')];
+      const target = blocks.find((b) => b.contains(document.activeElement)) || blocks[0];
+      if (target) target._addFiles(files);
+    });
+    const refresh = () => { send.disabled = !collect(li, ask); };
+    li.addEventListener('change', refresh);
+    li.addEventListener('input', refresh);
+    send.onclick = () => {
+      const answers = collect(li, ask);
+      if (!answers) return;
+      const images = {};
+      const groups = li.querySelectorAll('.qopts');
+      for (const q of ask.questions || []) {
+        const ids = (groups[q.index]?._pics || []).map((p) => p.imageId);
+        if (ids.length) images[q.question] = ids;
+      }
+      answerAsk(ask.id, { decision: 'allow', answers, ...(Object.keys(images).length ? { images } : {}) });
+    };
+    send.disabled = true;
+    btns.append(send);
     const inTerminal = el('button', 'mini ghost', 'Answer in the terminal');
     inTerminal.onclick = () => answerAsk(ask.id, { decision: 'allow' });
     btns.append(inTerminal);
@@ -475,6 +534,110 @@ function askRow(ask) {
   li.dataset.expires = String(ask.expiresAt);
   tickCountdown(li, ask.expiresAt);
   return li;
+}
+
+// The answers typed or ticked on a question card, or null while any question is open.
+function collect(li, ask) {
+  const answers = {};
+  const groups = li.querySelectorAll('.qopts');
+  for (const q of ask.questions || []) {
+    const box = groups[q.index];
+    if (!box) return null;
+    const picked = [...box.querySelectorAll('.qopt input:checked')].map((c) => c.value);
+    const typed = box.querySelector('.qother').value.trim();
+    if (box._busy > 0) return null;
+    if (typed) answers[q.question] = typed;
+    else if (picked.length) answers[q.question] = q.multiSelect ? picked : picked[0];
+    else if (!(box._pics || []).length) return null;
+  }
+  return answers;
+}
+
+// Picture attachments for one question block. State lives on the block: _pics and _busy.
+const PIC_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const PIC_HINT = 'Pictures must be PNG, JPEG, GIF or WebP, up to 5 MB, 3 per question';
+
+function picsBox(block, ask, li) {
+  const box = el('div', 'qpics');
+  const btn = el('button', 'mini ghost', 'Attach image');
+  btn.type = 'button';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = PIC_TYPES.join(',');
+  input.multiple = true;
+  input.hidden = true;
+  const hint = el('div', 'meta', PIC_HINT);
+  const err = el('p', 'qerr');
+  err.hidden = true;
+  const thumbs = el('div', 'qthumbs');
+  box.append(btn, input, hint, err, thumbs);
+  const changed = () => li.dispatchEvent(new Event('change'));
+  const fail = (msg) => { err.textContent = msg; err.hidden = !msg; };
+
+  async function upload(file) {
+    const holder = el('div', 'qthumb', 'Uploading…');
+    thumbs.append(holder);
+    block._busy++;
+    changed();
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onload = () => resolve(String(rd.result).replace(/^data:[^,]*;base64,/, ''));
+        rd.onerror = () => reject(new Error('Could not read that file'));
+        rd.readAsDataURL(file);
+      });
+      const r = await fetch('/api/ask-image', post({ askId: ask.id, name: file.name, data }));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.imageId) throw new Error(j.error || String(r.status));
+      const pic = { imageId: j.imageId, name: file.name, url: URL.createObjectURL(file) };
+      block._pics.push(pic);
+      holder.textContent = '';
+      const img = document.createElement('img');
+      img.src = pic.url;
+      img.alt = pic.name;
+      const x = el('button', 'qx', '×');
+      x.type = 'button';
+      x.title = 'Remove';
+      x.onclick = () => {
+        block._pics = block._pics.filter((p) => p !== pic);
+        URL.revokeObjectURL(pic.url);
+        holder.remove();
+        fail('');
+        changed();
+      };
+      holder.append(img, x, el('span', 'qname', pic.name));
+    } catch (e) {
+      holder.remove();
+      fail(e.message);
+    } finally {
+      block._busy--;
+      changed();
+    }
+  }
+
+  block._addFiles = (files) => {
+    fail('');
+    for (const f of files) {
+      if (!PIC_TYPES.includes(f.type)) { fail('That is not a picture'); continue; }
+      if (block._pics.length + block._busy >= 3) { fail('3 pictures at most for one question'); break; }
+      upload(f);
+    }
+  };
+  btn.onclick = () => input.click();
+  input.onchange = () => { block._addFiles([...input.files]); input.value = ''; };
+  block.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    box.classList.add('drop');
+    hint.textContent = 'Drop a picture here';
+  });
+  const endDrag = () => { box.classList.remove('drop'); hint.textContent = PIC_HINT; };
+  block.addEventListener('dragleave', (e) => { if (!block.contains(e.relatedTarget)) endDrag(); });
+  block.addEventListener('drop', (e) => {
+    e.preventDefault();
+    endDrag();
+    block._addFiles([...(e.dataTransfer?.files || [])]);
+  });
+  return box;
 }
 
 function tickCountdown(li, expiresAt) {
@@ -729,15 +892,19 @@ function clip(s, n) {
 
 function renderFeed() {
   const ul = $('feed');
-  ul.replaceChildren(...feedItems.slice(0, 70).map((f) => {
-    const li = el('li', f.tone || 'info');
+  const items = feedItems.slice(0, 70);
+  const names = new Set(items.map((f) => f.agentName || ''));
+  const single = names.size <= 1;
+  ul.replaceChildren(...items.map((f, i) => {
+    const showHead = !single && (i === 0 || (f.agentName || '') !== (items[i - 1].agentName || ''));
+    const li = el('li', (f.tone || 'info') + (showHead ? '' : ' cont'));
+    const text = el('p', 't', readable(f.text) || '');
+    if (!showHead) { li.append(text); return li; }
     const head = el('div', 'head');
     const who = el('b', 'who', f.agentName || 'system');
     if (f.color) who.style.color = f.color;
     head.append(who);
-    // Who on the first line, the plain sentence across the full width. The feed is
-    // already in order, so a timestamp adds noise rather than information.
-    li.append(head, el('p', 't', readable(f.text) || ''));
+    li.append(head, text);
     return li;
   }));
 }

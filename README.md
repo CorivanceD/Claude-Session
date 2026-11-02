@@ -125,14 +125,21 @@ Three safety rules:
 - **The command on a card is shown exactly as it will run** — no shortening, no reformatting.
   Deciding on a command you cannot read is not a decision.
 
-AskUserQuestion prompts get their own card, with one button per option. Choosing an option
-replies with `allow` and injects your answer into the tool input; this is best-effort — if
-Claude Code ignores the injected answer, use **Answer in the terminal**, which allows the call
+AskUserQuestion prompts get their own card. It shows every question with its options
+(checkboxes for pick-many), a box to type your own answer, and one **Send answers** button.
+Your answers go back as `allow` and are injected into the tool input; this is best-effort — if
+Claude Code ignores the injected answer, use **Answer in the terminal**, which hands it back and
+allows the call
 untouched so the dialog appears as it always did.
+
+Pictures can be attached to a question; they are saved in the system temp folder for 24 hours
+and Claude is given their file paths.
 
 ---
 
 ## Everything on screen is a sentence
+
+The colour legend lives in a strip under the header; the feed shows an agent's name once per run of lines.
 
 Claude Code's harness wraps parts of what it feeds the model in XML frames — a sub-agent's
 hand-back, a background job's notification, the editor's selection. Shown as-is, the page

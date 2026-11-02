@@ -89,6 +89,12 @@ export function announceFinished(item, say) {
   alert(`${what} finished`, bits || 'Its work is on the Finished shelf.', { say });
 }
 
-export function announceNeedsYou(say) {
+export function announceNeedsYou(say, ask) {
+  const first = ask?.kind === 'question' ? ask.questions?.[0]?.question : '';
+  if (first) {
+    let q = String(first).trim();
+    if (q.length > 80) q = `${q.slice(0, 80).replace(/\s+\S*$/, '')}…`;
+    return alert(`Claude asks: ${q}`, 'Answer it on the Agent Office page.', { kind: 'bad', say });
+  }
   alert('Claude needs your answer', 'It is waiting on you in the office.', { kind: 'bad', say });
 }
