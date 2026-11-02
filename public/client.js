@@ -375,8 +375,15 @@ function clipWords(s, n) {
   return `${(space > n * 0.5 ? window.slice(0, space) : window.trimEnd().slice(0, n - 1)).trimEnd()}…`;
 }
 
+const GROUPS = ['Needs you', 'Working', 'Standing by', 'Finished'];
+function groupRank(a) {
+  if (a.state === 'blocked') return 0;
+  if (['booting', 'walking', 'thinking', 'working', 'coffee'].includes(a.state)) return 1;
+  return a.state === 'idle' ? 2 : 3;
+}
+
 function render() {
-  const list = [...agents.values()].sort((a, b) => (a.state === 'done') - (b.state === 'done') || a.startedAt - b.startedAt);
+  const list = [...agents.values()].sort((a, b) => groupRank(a) - groupRank(b) || a.startedAt - b.startedAt);
   office.sync(list);
   dorm.roster();
 
@@ -384,9 +391,17 @@ function render() {
   $('tabOfficeN').textContent = String(list.length);
   $('tabDormN').textContent = inventory?.known ? String(dorm.roster().length) : '—';
   $('empty').hidden = list.length > 0;
+  $('crewHint').hidden = list.length === 0;
   renderSetup(list.length);
   const roster = $('roster');
-  roster.replaceChildren(...list.map(row));
+  const kids = [];
+  let lastRank = -1;
+  for (const a of list) {
+    const r = groupRank(a);
+    if (r !== lastRank) { kids.push(el('li', 'group', GROUPS[r])); lastRank = r; }
+    kids.push(row(a));
+  }
+  roster.replaceChildren(...kids);
 
   const badge = $('feedBadge');
   if (!health) { badge.className = 'badge neutral'; badge.textContent = 'connecting'; }
@@ -781,56 +796,74 @@ function row(a) {
   chip.style.color = color;
   who.append(left, chip);
   li.append(who);
-  // Which machine the session came from, and whose sub-agent this is, in plain words.
-  li.append(el('div', 'src', a.parent ? `helper working for ${boss(a) || 'another agent'}` : (ORIGIN[a.source] || 'came from somewhere else')));
-
   li.append(el('div', 'act', readable(a.activity) || 'no news yet'));
 
   if (a.prompt) {
-    const ask = el('div', 'ask', `“${clipWords(a.prompt, 110)}”`);
+    const ask = el('div', 'ask', `You asked: “${clipWords(a.prompt, 110)}”`);
     ask.title = readable(a.prompt);
     li.append(ask);
   }
 
-  const meter = el('div', 'meter' + (a.todoTotal ? '' : ' unknown'));
-  const bar = el('i');
-  bar.style.width = a.todoTotal ? `${Math.round((a.todoDone / a.todoTotal) * 100)}%` : '34%';
-  bar.style.background = color;
-  meter.append(bar);
-  li.append(meter);
-  li.append(el('div', 'steps', a.todoTotal
-    ? `${a.todoDone} of ${a.todoTotal} steps done`
-    : 'It has not made a plan yet.'));
-
-  const helping = helperLine(a);
-  if (helping) li.append(el('div', 'helping', helping));
-
-  li.append(el('div', 'meta', plainStats(a)));
-
-  const actions = el('div', 'mini');
-  actions.style.marginTop = '9px';
-  if (a.source === 'claude' && !['done', 'error'].includes(a.state)) {
-    const b = el('button', 'mini stop', 'Stop');
-    b.onclick = (e) => { e.stopPropagation(); fetch('/api/stop', post({ agentId: a.id })); };
-    actions.append(b);
+  // Where it came from (or whose helper it is), what it has done, and who is helping it.
+  const facts = [a.parent ? `helper working for ${boss(a) || 'another agent'}` : (ORIGIN[a.source] || 'came from somewhere else')];
+  const stats = plainStats(a);
+  if (stats) facts.push(stats);
+  if (!a.parent) {
+    const live = [...agents.values()].filter((x) => x.parent === a.id && !['done', 'error'].includes(x.state)).length;
+    if (live) facts.push(`${live} ${live === 1 ? 'helper' : 'helpers'} working`);
   }
+  li.append(el('div', 'facts', facts.join(' · ')));
+
+  if (a.todoTotal > 0) {
+    const meter = el('div', 'meter');
+    const bar = el('i');
+    bar.style.width = `${Math.round((a.todoDone / a.todoTotal) * 100)}%`;
+    bar.style.background = color;
+    meter.append(bar);
+    li.append(meter);
+    li.append(el('div', 'steps', `${a.todoDone} of ${a.todoTotal} steps done`));
+  }
+
+  if (!a.parent) {
+    const helping = helperLine(a);
+    if (helping) li.append(el('div', 'helping', helping));
+  }
+
   // Only a session that owns its own Claude Code process can be asked here: a helper
-  // avatar shares its parent's session, so arming belongs to the parent's card.
+  // avatar shares its parent's session, so the switch belongs to the parent's card.
   if (!a.parent && ['claude', 'claude-hook'].includes(a.source) && a.state !== 'done') {
     const armed = (asks.armed || []).includes(a.sessionId || a.id);
-    const t = el('button', 'mini route' + (armed ? ' armed' : ''), armed ? 'Approvals here ✓' : 'Route approvals here');
-    t.title = armed
-      ? 'While it is working, this agent asks the office before it writes or runs anything. Click again to send those questions back to the terminal.'
-      : 'Let the office answer this agent’s questions before it writes or runs anything, instead of the terminal.';
+    const title = 'Questions Claude asks you, and requests to write files or run commands, show up on this page instead of the terminal. You have 50 seconds to answer; after that the terminal asks as usual.';
+    const armrow = el('div', 'armrow');
+    armrow.title = title;
+    const t = el('button', 'armswitch');
+    t.type = 'button';
+    t.setAttribute('role', 'switch');
+    t.setAttribute('aria-checked', armed ? 'true' : 'false');
+    t.append(el('i'), el('span', null, 'Ask me here, not in the terminal'));
     t.onclick = (e) => {
       e.stopPropagation();
       fetch('/api/arming', post({ agentId: a.id, on: !armed })).then(() => refreshAsks()).catch(() => {});
     };
-    actions.append(t);
+    armrow.append(t, el('p', 'armstate' + (armed ? ' on' : ''), armed
+      ? 'On — its questions and permission requests appear here.'
+      : 'Off — it asks in your terminal or editor.'));
+    li.append(armrow);
   }
-  const d = el('button', 'mini', 'Dismiss');
+
+  const actions = el('div', 'mini');
+  actions.style.marginTop = '9px';
+  const d = el('button', 'mini', 'Hide card');
+  d.title = 'Takes this card off the page. The session keeps running and is not stopped. It stays hidden for 10 minutes.';
   d.onclick = (e) => { e.stopPropagation(); agents.delete(a.id); fetch('/api/dismiss', post({ agentId: a.id })); markDirty(); };
   actions.append(d);
+  if (a.source === 'claude' && !a.parent && !['done', 'error'].includes(a.state)) {
+    const b = el('button', 'mini stop', 'Stop run');
+    b.title = 'Ends this run now. It cannot be resumed.';
+    b.style.marginLeft = 'auto';
+    b.onclick = (e) => { e.stopPropagation(); fetch('/api/stop', post({ agentId: a.id })); };
+    actions.append(b);
+  }
   li.append(actions);
 
   li.onclick = () => { selected = a.id; office.selected = a.id; markDirty(); };

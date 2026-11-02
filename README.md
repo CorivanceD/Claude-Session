@@ -139,6 +139,8 @@ and Claude is given their file paths.
 
 ## Everything on screen is a sentence
 
+The Crew list groups sessions by who needs you: Needs you, Working, Standing by, Finished. The "Ask me here, not in the terminal" switch on a session's card sends that session's questions and permission requests to the page. Hide card only hides the card, it never stops a session; Stop run is for runs started from this page.
+
 The colour legend lives in a strip under the header; the feed shows an agent's name once per run of lines.
 
 Claude Code's harness wraps parts of what it feeds the model in XML frames — a sub-agent's
