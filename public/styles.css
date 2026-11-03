@@ -497,4 +497,5 @@ button.mini:disabled { opacity: .5; cursor: default; }
 .qthumb img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; display: block; }
 .qthumb .qx { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; padding: 0; line-height: 14px; border: 0; border-radius: 50%; background: #000a; color: #fff; cursor: pointer; font-size: 12px; }
 .qthumb .qname { display: block; max-height: 2.4em; overflow: hidden; }
+#picsRun, #picsSess { margin: -2px 0 10px; }
 .qerr { margin: 0; color: #FF5E7A; font-size: 11.5px; }

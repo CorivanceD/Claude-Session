@@ -6,6 +6,7 @@
 //
 // Everything on screen is a sentence, and every number is one the server actually measured.
 
+import { mountPictures } from './pictures.js';
 const $ = (id) => document.getElementById(id);
 
 // Browsing the home folder is absolute paths; working inside the root is relative.
@@ -666,13 +667,20 @@ function openLaunchForm(session) {
   $('wbSessPrompt').scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
+let sessPics = null;
+
 function closeLaunchForm() {
+  if (sessPics) sessPics.clear();
   $('wbSessForm').hidden = true;
   $('wbFilePick').hidden = true;
   state.sessResume = null;
 }
 
 function wireSessions() {
+  sessPics = mountPictures($('picsSess'), {
+    textarea: $('wbSessPrompt'),
+    onChange: (p) => { $('wbSessGo').disabled = p.busy(); },
+  });
   $('wbSessNew').addEventListener('click', () => openLaunchForm(null));
   $('wbSessCancel').addEventListener('click', closeLaunchForm);
   $('wbSessFileBtn').addEventListener('click', () => {
@@ -691,6 +699,7 @@ function wireSessions() {
     e.preventDefault();
     const prompt = $('wbSessPrompt').value.trim();
     if (!prompt) return note('wbSessNote', 'Type what to ask for first.');
+    if (sessPics.busy()) return;
     const btn = $('wbSessGo');
     btn.disabled = true;
     note('wbSessNote', state.sessResume ? 'Walking back in to that conversation…' : 'Sending it in…');
@@ -703,6 +712,7 @@ function wireSessions() {
         permissionMode: $('wbSessAllow').value,
         approvalsHere: $('wbSessApprove').checked,
         closePrevious: !state.sessResume && $('wbSessClosePrev').checked,
+        images: sessPics.ids().length ? sessPics.ids() : undefined,
       });
       const name = out.state && out.state.name ? out.state.name : 'the new session';
       note('wbSessNote', `${name} is on the floor. ${out.closedPrevious ? `It closed the ${out.closedPrevious} ${out.closedPrevious === 1 ? 'session' : 'sessions'} this page had started here first — those conversations are kept, not deleted. ` : ''}Watch it at a desk, or read again below when it ends.`);
@@ -714,7 +724,7 @@ function wireSessions() {
     } catch (err) {
       note('wbSessNote', err.message);
     } finally {
-      btn.disabled = false;
+      btn.disabled = sessPics.busy();
     }
   });
 }

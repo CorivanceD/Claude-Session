@@ -1,3 +1,4 @@
+import { mountPictures } from './pictures.js';
 import { Office } from './world.js';
 import { renderLegend } from './legend.js';
 import { Dorm } from './dorm.js';
@@ -197,6 +198,10 @@ function pushFeed(ev, silent) {
 }
 
 function wire() {
+  const pics = mountPictures($('picsRun'), {
+    textarea: $('prompt'),
+    onChange: (p) => { $('runBtn').disabled = p.busy() || !health || !health.claude.found; },
+  });
   $('runForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
@@ -207,16 +212,18 @@ function wire() {
       approvalsHere: $('approveHere').checked,
     };
     if (!payload.prompt) return;
+    if (pics.busy()) return;
+    if (pics.ids().length) payload.images = pics.ids();
     $('runBtn').disabled = true;
     try {
       const r = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
       const j = await r.json();
       if (!r.ok) banner(`Run rejected: ${j.error || r.status}`, 'bad');
-      else { $('banner').hidden = true; $('prompt').value = ''; }
+      else { $('banner').hidden = true; $('prompt').value = ''; pics.clear(); }
     } catch (err) {
       banner(`Run failed: ${err.message}`, 'bad');
     } finally {
-      $('runBtn').disabled = !health || !health.claude.found;
+      $('runBtn').disabled = pics.busy() || !health || !health.claude.found;
     }
   });
 
