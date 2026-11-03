@@ -227,6 +227,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/inventory') return send(res, 200, room.inventory.snapshot());
     if (p === '/api/history') return send(res, 200, room.history.snapshot());
+    if (p === '/api/history/all') {
+      const all = room.history.snapshot(Infinity);
+      const items = all.items.map((item) => {
+        const where = projects.insideRoot(item.cwd || '');
+        const rel = where.error ? null : where.rel;
+        return { ...item, rel, canFollowUp: Boolean(item.sessionId && rel !== null), canRunAgain: Boolean(item.ask && rel !== null) };
+      });
+      return send(res, 200, { items, count: all.count });
+    }
 
     // Where your projects live, and what one folder looks like from the inside.
     if (p === '/api/projects') {
@@ -331,6 +340,13 @@ const server = http.createServer(async (req, res) => {
         const stopped = run.stop();
         if (stopped) setTimeout(() => runs.delete(run.id), 6000);
         return send(res, 200, { stopped });
+      }
+
+      if (p === '/api/history/pin') {
+        const body = await readBody(req);
+        if (typeof body.key !== 'string') return send(res, 400, { error: 'key must be a string' });
+        if (!room.history.setPinned(body.key, Boolean(body.pinned))) return send(res, 404, { error: 'that run is not in the history' });
+        return send(res, 200, { ok: true });
       }
 
       if (p === '/api/dismiss') {

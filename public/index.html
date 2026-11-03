@@ -175,6 +175,7 @@
     <nav class="wbtabs">
       <button class="tab on" id="wbTabProjects" type="button">Projects</button>
       <button class="tab" id="wbTabSessions" type="button">Sessions</button>
+      <button class="tab" id="wbTabHistory" type="button">History</button>
       <button class="tab" id="wbTabUsage" type="button">Claude &amp; usage</button>
     </nav>
     <button class="mini" id="wbClose" type="button">close</button>
@@ -326,6 +327,30 @@
       <ul id="wbSessList" class="sesslist"></ul>
       <p id="wbSessEmpty" class="empty" hidden>Nothing here yet.</p>
       <p id="wbSessRead" class="hint" hidden></p>
+    </section>
+
+    <section id="wbHistory" class="wbpane" hidden>
+      <div class="rootbar">
+        <p id="wbHistLine" class="rootline">Reading the finished runs…</p>
+        <div class="rootacts">
+          <button class="mini" id="wbHistRefresh" type="button">Refresh</button>
+        </div>
+      </div>
+      <div class="histctl">
+        <input id="wbHistSearch" type="search" placeholder="Search what you asked or what it did" aria-label="Search finished runs" autocomplete="off">
+        <select id="wbHistOutcome" aria-label="Filter by outcome">
+          <option value="">All outcomes</option>
+          <option value="finished">Finished the job</option>
+          <option value="error">Stopped with a problem</option>
+          <option value="quiet">Went quiet</option>
+          <option value="closed">Session closed</option>
+          <option value="stopped">You stopped it</option>
+        </select>
+        <select id="wbHistFolder" aria-label="Filter by folder"><option value="">All folders</option></select>
+        <label class="histpin"><input id="wbHistPinned" type="checkbox"> Pinned only</label>
+      </div>
+      <ul id="wbHistList" class="sesslist"></ul>
+      <p id="wbHistEmpty" class="empty" hidden></p>
     </section>
 
     <section id="wbUsage" class="wbpane" hidden>

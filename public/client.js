@@ -2,7 +2,7 @@ import { mountPictures } from './pictures.js';
 import { Office } from './world.js';
 import { renderLegend } from './legend.js';
 import { Dorm } from './dorm.js';
-import { alertsOn, setAlerts, canNotify, announceFinished, announceNeedsYou } from './notify.js';
+import { alertsOn, setAlerts, canNotify, announceFinished, announceNeedsYou, catchUp, popupState } from './notify.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -101,6 +101,8 @@ async function init() {
   setInterval(() => { $('clock').textContent = new Date().toLocaleTimeString(); }, 1000);
 }
 
+let popupNoted = false;
+
 function connect() {
   const es = new EventSource('/api/stream');
   es.onopen = () => setConn('live');
@@ -114,6 +116,13 @@ function connect() {
       if (msg.inventory) setInventory(msg.inventory);
       if (msg.asks) setAsks(msg.asks);
       if (msg.history) setShelf(msg.history);
+      catchUp({ history: msg.history, asks: msg.asks }, banner);
+      if (alertsOn() && popupState() !== 'granted' && !popupNoted) {
+        popupNoted = true;
+        banner(popupState() === 'default'
+          ? 'Alerts are on. Click anywhere on the page once to let your browser show pop-ups too.'
+          : 'Alerts are on, but your browser is blocking pop-ups. You will still hear a chime and see the tab title change. Allow notifications for this site in your browser settings to get pop-ups.');
+      }
       resync();
       return;
     }
