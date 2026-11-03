@@ -549,7 +549,7 @@ server.listen(PORT, HOST, () => {
 });
 
 // Hooked sessions that vanish without a SessionEnd must still leave the floor.
-setInterval(() => reapStaleHooks(room, { history: room.history, asks }), 15_000).unref();
+setInterval(() => reapStaleHooks(room, { history: room.history, asks }), 5_000).unref();
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
