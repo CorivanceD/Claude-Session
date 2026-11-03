@@ -112,6 +112,8 @@ button:hover { background: #26324f; transform: translateY(-1px); }
 button.primary { width: 100%; background: linear-gradient(180deg, #4de1c1, #2fbfa3); color: #04211b; border-color: #57f0d0; font-size: 13px; padding: 11px; }
 button.primary:hover { filter: brightness(1.07); }
 button.primary:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+button.accent { background: linear-gradient(180deg, #4de1c1, #2fbfa3); color: #04211b; border-color: #57f0d0; }
+button.accent:hover { filter: brightness(1.07); }
 button.mini { padding: 5px 9px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
 button.stop { background: #3a1d28; border-color: #ff5e7a55; color: #ffc2cd; }
 button.on { background: var(--amber); color: #3a2200; border-color: var(--amber); }
@@ -373,7 +375,13 @@ button.armswitch[aria-checked="true"] > i::after { transform: translateX(14px); 
 
 .rootbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .rootline { flex: 1 1 320px; margin: 0; font-size: 13px; color: var(--ink); overflow-wrap: anywhere; line-height: 1.5; }
-.rootacts { display: flex; gap: 6px; flex: none; }
+.rootacts { display: flex; gap: 6px; flex: none; align-items: center; }
+.rootacts button.mini { text-transform: none; letter-spacing: 0; font-size: 13px; white-space: nowrap; min-height: 40px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; }
+.rootacts select { min-height: 40px; margin-top: 0; }
+@media (max-width: 600px) {
+  .rootacts { flex-wrap: wrap; width: 100%; }
+  .rootacts select { flex: 1 1 100%; }
+}
 
 .inlineform, .branchform, .picker {
   border: 1px solid var(--line); border-radius: var(--r); background: var(--card);
