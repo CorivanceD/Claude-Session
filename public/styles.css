@@ -193,8 +193,9 @@ code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--teal)
 .feed li.todo .t { color: var(--amber); }
 .feed li.say .t { color: var(--ink); font-style: italic; }
 
-.promptbar { display: flex; align-items: center; gap: 9px; margin: -2px 0 10px; }
+.promptbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: -2px 0 10px; }
 .hintline { font: 600 10.5px/1.4 ui-monospace, monospace; color: var(--dim); }
+.promptbar .hintline { font: 11px/1.45 system-ui, sans-serif; letter-spacing: 0; text-transform: none; flex-basis: 100%; }
 .adv { margin: 4px 0 10px; border: 1px dashed var(--line); border-radius: 9px; padding: 7px 9px; }
 .adv summary { font: 700 10.5px/1 ui-monospace, monospace; letter-spacing: .07em; color: var(--dim); cursor: pointer; text-transform: uppercase; }
 .adv[open] summary { color: var(--muted); margin-bottom: 8px; }

@@ -230,6 +230,14 @@ function wire() {
 
   $('fitBtn').addEventListener('click', () => { activeIso().autoFit = true; activeIso().fit(); });
   $('sharpenBtn').addEventListener('click', sharpenComposer);
+  $('prompt').addEventListener('input', () => {
+    const box = $('prompt');
+    if ($('sharpenBtn').disabled) return;
+    if (box.dataset.sharpened && box.value.trim() !== box.dataset.sharpened) {
+      box.dataset.sharpened = '';
+      setRewriteUi('idle');
+    }
+  });
   window.addEventListener('hashchange', () => showRoom(location.hash === '#dorm' ? 'dorm' : 'office'));
   $('detailClose').addEventListener('click', () => { selected = null; office.selected = null; markDirty(); });
   const alertsBtn = $('alertsBtn');
@@ -278,32 +286,43 @@ async function sharpenPrompt(promptText, cwd) {
   return j.improved;
 }
 
+const REWRITE_IDLE = 'Claude rewrites what you typed so the agent knows the goal, what to touch, and what answer to give. You can undo it.';
+
+function setRewriteUi(state, detail) {
+  const btn = $('sharpenBtn');
+  const note = $('sharpenNote');
+  const ui = {
+    idle: ['Rewrite my request', false, REWRITE_IDLE],
+    empty: ['Rewrite my request', false, 'Type what you want first, then click this.'],
+    working: ['Rewriting…', true, 'Claude is rewriting your request. It only reads, nothing is changed.'],
+    done: ['Undo rewrite', false, 'Rewritten by Claude. Edit it freely, or click Undo rewrite to get your own words back.'],
+    undone: ['Rewrite my request', false, 'Back to your own words.'],
+    error: ['Rewrite my request', false, `Could not rewrite it: ${detail}. Your text is unchanged.`],
+  }[state];
+  btn.textContent = ui[0];
+  btn.disabled = ui[1];
+  note.textContent = ui[2];
+}
+
 async function sharpenComposer() {
   const box = $('prompt');
-  const note = $('sharpenNote');
-  const btn = $('sharpenBtn');
   const current = box.value.trim();
-  if (!current) { note.textContent = 'write a prompt first'; return; }
+  if (!current) { setRewriteUi('empty'); return; }
   if (box.dataset.sharpened === current) {
     box.value = box.dataset.original || current;
     box.dataset.sharpened = '';
-    note.textContent = 'back to your wording';
+    setRewriteUi('undone');
     return;
   }
-  btn.disabled = true;
-  btn.textContent = 'Sharpening…';
-  note.textContent = 'asking claude to tighten it (read-only, one turn)';
+  setRewriteUi('working');
   try {
     const improved = await sharpenPrompt(current, $('cwd').value.trim() || undefined);
     box.dataset.original = current;
     box.dataset.sharpened = improved;
     box.value = improved;
-    note.textContent = 'rewritten — click Sharpen again to undo, or edit it';
+    setRewriteUi('done');
   } catch (err) {
-    note.textContent = err.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Sharpen prompt';
+    setRewriteUi('error', err.message);
   }
 }
 
