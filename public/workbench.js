@@ -701,7 +701,6 @@ function wireSessions() {
         sessionId: state.sessResume || undefined,
         name: $('wbSessName').value.trim() || undefined,
         permissionMode: $('wbSessAllow').value,
-        maxTurns: Number($('wbSessTurns').value) || 20,
         approvalsHere: $('wbSessApprove').checked,
         closePrevious: !state.sessResume && $('wbSessClosePrev').checked,
       });

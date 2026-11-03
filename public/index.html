@@ -44,10 +44,8 @@
           </div>
           <div class="row">
             <label class="grow">Model
-              <input id="model" placeholder="default model" autocomplete="off" />
-            </label>
-            <label>Most steps it may take
-              <input id="turns" type="number" min="1" max="200" value="20" />
+              <input id="model" placeholder="Leave empty to use your default model" autocomplete="off" />
+              <span class="fieldnote">Which Claude does the work, e.g. sonnet or opus.</span>
             </label>
           </div>
           <div class="row">
@@ -285,9 +283,6 @@
         <div class="row">
           <label class="grow">Name this session
             <input id="wbSessName" autocomplete="off" placeholder="optional — it shows on the office floor" />
-          </label>
-          <label>Most steps it may take
-            <input id="wbSessTurns" type="number" min="1" max="200" value="20" />
           </label>
         </div>
         <div class="row">

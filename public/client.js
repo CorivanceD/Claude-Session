@@ -203,7 +203,6 @@ function wire() {
       prompt: $('prompt').value.trim(),
       model: $('model').value.trim() || null,
       permissionMode: $('mode').value,
-      maxTurns: Number($('turns').value) || 20,
       cwd: $('cwd').value.trim() || undefined,
       approvalsHere: $('approveHere').checked,
     };
