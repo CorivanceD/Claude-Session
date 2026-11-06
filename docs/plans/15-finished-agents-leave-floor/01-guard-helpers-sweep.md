@@ -28,3 +28,9 @@ G1 (late-event guard), G2 (new work revives), G3 (Stop ends helpers), G4 (Subage
 
 ## Done when
 `node --test lib/hook-bridge.test.mjs` passes with the original five tests unchanged plus the new ones; `node --test lib/*.test.mjs` passes; `node --check lib/hook-bridge.js`. No file outside Scope changed (`git status --short`). Append `## Result`.
+
+## Result
+- Status: DONE
+- Files changed: lib/hook-bridge.js, lib/hook-bridge.test.mjs
+- Checks: node --test lib/*.test.mjs → PASS (36/36); node --check lib/hook-bridge.js → PASS; git status shows only the two Scope files
+- Notes: PostToolUse handler shadowed `words()` with a local number (would throw); renamed local to `nWords`. endHelpers/SubagentStop run after the upsert in handleHook; handback marker is `turn.handback`.
